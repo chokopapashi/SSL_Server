@@ -1,0 +1,13 @@
+HTTP/1.1 200 OK
+Content-Type: application/json; charset=UTF-8
+Date: Tue, 17 Oct 2017 06:46:53 GMT
+Expires: Tue, 17 Oct 2017 06:46:53 GMT
+Cache-Control: private, max-age=0
+Server: Test
+Vary: Accept-Encoding
+Transfer-Encoding: chunked
+
+10
+{"key":12345678}
+0
+

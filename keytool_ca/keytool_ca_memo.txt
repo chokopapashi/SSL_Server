@@ -1,0 +1,14 @@
+<https://docs.oracle.com/javase/jp/6/technotes/tools/windows/keytool.html>
+<https://docs.oracle.com/cd/E19226-01/821-1299/ghlgv/index.html>
+<https://docs.oracle.com/cd/E19416-01/820-5959/6nhaosbv5/index.html>
+<--http://codezine.jp/article/detail/105>
+<https://docs.oracle.com/cd/E19416-01/820-5959/ggezu/index.html>
+
+#create CA
+keytool -genkey -alias sslsv_test -keyalg RSA -keypass ****** -storepass ****** -keystore sslsv_test_keystore.jks
+
+#create CSR
+keytool -keystore sslsv_test_keystore.jks -certreq -alias sslsv_test -keyalg RSA -file server.csr
+
+
+

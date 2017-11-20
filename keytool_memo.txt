@@ -1,0 +1,6 @@
+openssl pkcs12 -export -in newcert.pem -inkey newkey.pem -out new.pkcs12
+
+keytool -importkeystore -srckeystore new.pkcs12 -destkeystore ssl.keystore -srcstoretype pkcs12 -deststoretype jks
+
+
+
