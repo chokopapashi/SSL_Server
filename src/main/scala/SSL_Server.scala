@@ -1,6 +1,8 @@
 import java.io.BufferedReader
+import java.io.File
 import java.io.FileInputStream
 import java.io.InputStreamReader
+import java.io.OutputStream
 
 import javax.net.ssl.SSLSocket
 import javax.net.ssl.SSLServerSocket
@@ -21,7 +23,9 @@ object SSL_Server {
 
     val config = ConfigFactory.load()
 
-    def start_echo_future(sslso: SSLSocket)
+    /* ---------------------------------------------------------------------- */
+
+    def startEchoFuture(sslso: SSLSocket)
     {
         Future {
             log_debug("echo_future:start")
@@ -39,105 +43,127 @@ object SSL_Server {
         }
     }
 
-    def start_http_future(sslso: SSLSocket) {
+    /* ---------------------------------------------------------------------- */
+
+    trait ResponseData {
+        def nextData: Option[Array[Byte]]
+
+        def getBytesFromFile(file: File): Array[Byte] = {
+            log_debug(s"read data file=$file")
+            val buff: Array[Byte] = new Array[Byte](4096)
+            val sdfs = new FileInputStream(file)
+            ultimately {
+                if(sdfs != null)
+                    sdfs.close
+            } {
+                val sdfbuff = mutable.ArrayBuffer.empty[Byte]
+                var sdf_loop_flag = true
+                while(sdf_loop_flag) {
+                    val cnt = sdfs.read(buff)
+                    if(cnt < 0)
+                        sdf_loop_flag = false
+                    else
+                        sdfbuff ++= buff.take(cnt);
+                }
+                sdfbuff.toArray 
+            }
+        }
+    }
+
+    case class ResponseDataFile(fileName: String) extends ResponseData {
+        def nextData: Option[Array[Byte]] = Some(getBytesFromFile(new File(fileName)))
+    }
+
+    case class ResponseDataDir(dirName: String) extends ResponseData {
+        val dirLister = DirectoryLister(new File(dirName))
+        def nextData: Option[Array[Byte]] = dirLister.nextFile match {
+            case Some(file) => Some(getBytesFromFile(file))
+            case None => None
+        }
+    }
+
+    def sendData(data: Array[Byte], out: OutputStream) {
+//        log_trace(f"%n${new String(data)}")
+        if(config.getBoolean("send.data.is_split")) {
+            def send_recurce(d: Array[Byte], i: Int) {
+                if(d.nonEmpty) {
+                    if(d.size < i)
+                        out.write(d)
+                    else {
+                        out.write(d.take(i))
+                        send_recurce(d.drop(i), i+1)
+                    }
+                }
+            }
+            send_recurce(data, 1)
+        } else
+            out.write(data)
+    }
+
+    def startHttpFuture(sslso: SSLSocket, responseData: ResponseData) {
         Future {
             log_debug("http_future:start")
             allCatch andFinally {
-                l_t()
                 sslso.close
             } either {
-                l_t()
-                /* prepare response data */
-                val buff: Array[Byte] = new Array[Byte](4096)
-                val sdfs = new FileInputStream(config.getString("send.data.file"))
-                l_t()
-                val response_data = ultimately {
-                    l_t()
-                    if(sdfs != null) sdfs.close
-                } {
-                    val sdfbuff = mutable.ArrayBuffer.empty[Byte]
-                    var sdf_loop_flag = true
-                    while(sdf_loop_flag) {
-                        l_t()
-                        val cnt = sdfs.read(buff)
-                        if(cnt < 0)
-                            sdf_loop_flag = false
-                        else
-                            sdfbuff ++= buff.take(cnt);
-                    }
-                    sdfbuff.toArray 
-                }
-                log_debug(f"%n${new String(response_data)}")
-                l_t()
-                /* request - response loop */
                 val sslso_r = new BufferedReader(new InputStreamReader(sslso.getInputStream))
-                val sslso_w = sslso.getOutputStream
                 var req_res_loop_flag = true
                 while(req_res_loop_flag) {
-                    l_t()
                     val line = sslso_r.readLine
                     if(line == null)
                         req_res_loop_flag = false
                     else {
-                        log_debug(line)
+                        log_trace(line)
                         if(line.endsWith("HTTP/1.1")) {
-                            l_t()
-                            if(config.getBoolean("send.data.is_split")) {
-                                l_t()
-                                def send_recurce(data: Array[Byte], i: Int) {
-                                    l_t(s"${data.size},$i")
-                                    if(data.nonEmpty) {
-                                        l_t()
-                                        if(data.size < i) {
-                                            l_t()
-                                            sslso_w.write(data)
-                                        } else {
-                                            l_t()
-                                            sslso_w.write(data.take(i))
-                                            send_recurce(data.drop(i), i+1)
-                                        }
-                                    }
+                            responseData.nextData match {
+                                case Some(data) => {
+                                    sendData(data, sslso.getOutputStream)
+                                    if(config.getBoolean("send.data.is_after_end"))
+                                        req_res_loop_flag = false
                                 }
-                                send_recurce(response_data, 1)
-                            }
-                            else {
-                                l_t()
-                                sslso_w.write(response_data)
+                                case None => req_res_loop_flag = false
                             }
                         }
                     }
-                    if(config.getBoolean("send.data.is_after_end")) {
-                        l_t()
-                        req_res_loop_flag = false
-                    }
                 }
-                l_t()
             } match {
-                case Right(_) => {
-                    l_t()
-                }
-                case Left(th) => {
-                    l_t()
-                    th.printStackTrace
-                }
+                case Right(_) => /* Nothing to do */
+                case Left(th) => th.printStackTrace
             }
             sslso.close
-            l_t()
         }
     }
+
+    /* ---------------------------------------------------------------------- */
 
     def startServer() {
         val sslsvso_factory = SSLServerSocketFactory.getDefault()
         val sslsvso = sslsvso_factory.createServerSocket(config.getInt("server.port")).asInstanceOf[SSLServerSocket]
+        log_debug(s"sslsvso=$sslsvso")
 
+        val responseData =
+            if(config.getBoolean("send.data.is_directory_listing"))
+                ResponseDataDir(config.getString("send.data.directory"))
+            else
+                ResponseDataFile(config.getString("send.data.file"))
+
+        var force_shutdown_count = 0
         while(true) {
             val sslso = sslsvso.accept().asInstanceOf[SSLSocket]
             log_info(s"a peer connected : ${sslso.getRemoteSocketAddress}")
             log_info(s"SSLSession :  ${sslso.getSession}")
             config.getString("server.mode") match {
-                case "echo" => log_info("start echo server") ; start_echo_future(sslso)
-                case "http" => log_info("start http server") ; start_http_future(sslso)
+                case "echo" => log_info("start echo server") ; startEchoFuture(sslso)
+                case "http" => log_info("start http server") ; startHttpFuture(sslso, responseData)
                 case m => log_error(s"config : invalid server.mode = $m")
+            }
+            if(config.getBoolean("server.force_shutdown.enable")) {
+                force_shutdown_count += 1
+                log_info(s"force shutdown count = $force_shutdown_count")
+                if(config.getInt("server.force_shutdown.count") <= force_shutdown_count) {
+                    log_info("execute force shutdown")
+                    sys.exit(1)
+                }
             }
         }
     }

@@ -57,7 +57,7 @@ lazy val root = (project in file(".")).
         batScriptExtraDefines += """set "APP_CLASSPATH=%APP_CLASSPATH%;%SSL_SERVER_HOME%\conf"""",
         bashScriptExtraDefines += """addJava "-Dlogback.configurationFile=./conf/logback.xml"""",
         mappings in Universal := (mappings in Universal).value filterNot {
-            case (_, name) => name.endsWith("~")
+            case (_, name) => name.matches( """.*~|.*\.swp|.*\.swo""" )
         },
 
         // Avoid sbt warning ([warn] This usage is deprecated and will be removed in sbt 1.0)
