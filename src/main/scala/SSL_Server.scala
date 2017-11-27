@@ -70,8 +70,17 @@ object SSL_Server {
         }
     }
 
-    case class ResponseDataFile(fileName: String) extends ResponseData {
-        def nextData: Option[Array[Byte]] = Some(getBytesFromFile(new File(fileName)))
+    case class ResponseDataFile(fileName: String, fileName2: Option[String]) extends ResponseData {
+        var fileList = fileName2 match {
+            case Some(fn2) => List(fileName, fn2)
+            case None => List(fileName)
+        }
+
+        def nextData: Option[Array[Byte]] = {
+            val fl = fileList
+            fileList = fl.tail :+ fl.head
+            Some(getBytesFromFile(new File(fl.head)))
+        }
     }
 
     case class ResponseDataDir(dirName: String) extends ResponseData {
@@ -145,7 +154,11 @@ object SSL_Server {
             if(config.getBoolean("send.data.is_directory_listing"))
                 ResponseDataDir(config.getString("send.data.directory"))
             else
-                ResponseDataFile(config.getString("send.data.file"))
+                ResponseDataFile(config.getString("send.data.file"),
+                                 if(config.hasPath("send.data.file_2"))
+                                     Some(config.getString("send.data.file_2"))
+                                 else
+                                     None)
 
         var force_shutdown_count = 0
         while(true) {
