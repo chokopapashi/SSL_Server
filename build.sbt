@@ -51,6 +51,8 @@ lazy val root = (project in file(".")).
         libraryDependencies += "org.hirosezouen" %% "hzutil" % "2.2.0",
         // add HZActor dependency
         //libraryDependencies += "org.hirosezouen" %% "hzactor" % "1.1.0",
+        // add DirectoryLister dependency
+        libraryDependencies += "org.hirosezouen" %% "directorylister" % "1.0.0",
 
         // sbt-native-packager settings
         executableScriptName := "SSL_Server",
