@@ -123,15 +123,19 @@ object SSL_Server {
                         req_res_loop_flag = false
                     else {
                         log_trace(line)
-                        if(line.endsWith("HTTP/1.1")) {
-                            responseData.nextData match {
-                                case Some(data) => {
-                                    sendData(data, sslso.getOutputStream)
-                                    if(config.getBoolean("send.data.is_after_end"))
-                                        req_res_loop_flag = false
+                        if(config.getBoolean("send.data.enable")) {
+                            if(line.endsWith("HTTP/1.1")) {
+                                responseData.nextData match {
+                                    case Some(data) => {
+                                        sendData(data, sslso.getOutputStream)
+                                        if(config.getBoolean("send.data.is_after_end"))
+                                            req_res_loop_flag = false
+                                    }
+                                    case None => req_res_loop_flag = false
                                 }
-                                case None => req_res_loop_flag = false
                             }
+                        } else {
+                            log_trace("send.data.enable=false")
                         }
                     }
                 }
